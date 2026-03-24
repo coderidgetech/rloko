@@ -1,0 +1,9 @@
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/coderidgetech/rloco-frontend.git
+[submodule "backend"]
+	path = backend
+	url = https://github.com/coderidgetech/rloco-backend.git
+[submodule "mobile-app"]
+	path = mobile-app
+	url = https://github.com/coderidgetech/rloko_mobile.git
