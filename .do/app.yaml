@@ -1,5 +1,7 @@
 # DigitalOcean App Platform — app spec: app.yaml (root). Sync: cp app.yaml .do/app.yaml
 # https://docs.digitalocean.com/products/app-platform/reference/app-spec/
+# CLI: doctl auth init  then  ./scripts/deploy-app-platform.sh
+#      update existing:  DO_APP_ID=<id> ./scripts/deploy-app-platform.sh
 #
 # MONGODB_URI is injected from the managed database component below. Add JWT, Twilio, etc. in the console.
 # The root Dockerfile in this monorepo is not a service here — api + web use rloco-backend / rloco-frontend.
