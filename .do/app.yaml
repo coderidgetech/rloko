@@ -1,0 +1,99 @@
+# DigitalOcean App Platform — https://rloko.com
+# https://docs.digitalocean.com/products/app-platform/reference/app-spec/
+#
+# 1) Set `github.repo` to your `owner/rloko` (this file assumes the git root is
+#    the `rloko/` monorepo with `backend/` and `frontend/`).
+# 2) In the control panel, add these as encrypted env vars on the `api` component:
+#    MONGODB_URI, JWT_SECRET, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
+#    TWILIO_VERIFY_SERVICE_SID, and any of STRIPE_*, SMTP_*, SHIPPO_*, STORAGE_*
+#    from backend/.env.example
+# 3) Point DNS for rloko.com and www to the app’s CNAME/IPs (DigitalOcean docs:
+#    “How to manage domains in App Platform”).
+# 4) Rebuild the `web` service after changing any VITE_* variable.
+
+name: rloko
+region: nyc
+
+domains:
+  - domain: rloko.com
+    type: PRIMARY
+  - domain: www.rloko.com
+    type: ALIAS
+
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /health
+      component:
+        name: api
+    - match:
+        path:
+          prefix: /ready
+      component:
+        name: api
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
+
+services:
+  - name: api
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: YOUR_GITHUB_ORG/rloko
+    source_dir: backend
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+    envs:
+      - key: ENV
+        value: production
+        scope: RUN_TIME
+        type: GENERAL
+      - key: PORT
+        value: "8080"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: APP_BASE_URL
+        value: https://rloko.com
+        scope: RUN_TIME
+        type: GENERAL
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://rloko.com,https://www.rloko.com
+        scope: RUN_TIME
+        type: GENERAL
+
+  - name: web
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: YOUR_GITHUB_ORG/rloko
+    source_dir: frontend
+    dockerfile_path: Dockerfile
+    http_port: 80
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: VITE_API_URL
+        value: https://rloko.com/api
+        scope: BUILD_TIME
+        type: GENERAL
+      # Optional: add in the console (BUILD_TIME) and redeploy — VITE_STRIPE_PUBLISHABLE_KEY,
+      # VITE_GOOGLE_CLIENT_ID, VITE_GOOGLE_MAPS_API_KEY
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
