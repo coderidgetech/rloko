@@ -13,7 +13,8 @@ features:
   - buildpack-stack=ubuntu-22
 
 databases:
-  - name: rloko_mongo
+  # Name must match ^[a-z][a-z0-9-]{0,30}[a-z0-9]$ (no underscores)
+  - name: rlokomongo
     engine: MONGODB
     version: "7"
     production: true
@@ -68,7 +69,7 @@ services:
       initial_delay_seconds: 20
     envs:
       - key: MONGODB_URI
-        value: ${rloko_mongo.DATABASE_URL}
+        value: ${rlokomongo.DATABASE_URL}
         scope: RUN_TIME
         type: GENERAL
       - key: ENV
