@@ -1,16 +1,19 @@
 # DigitalOcean App Platform — https://rloko.com
 # https://docs.digitalocean.com/products/app-platform/reference/app-spec/
 #
-# This file is at the repo root so you can select it when creating the app
-# (“From an app spec / Edit as YAML”), or run: doctl apps create --spec app.yaml
+# This repo’s spec is this file: app.yaml (at the repository root).
+# `.do/app.yaml` is a copy of the same spec for tools that look only in `.do/`.
+# After changing app.yaml, run:  cp app.yaml .do/app.yaml
 #
-# If the control panel says “No components detected” on the GitHub screen, it is
-# because the scanner only looks for Dockerfile, package.json, etc. This repo now
-# has a root Dockerfile for that step, but the *real* stack is the two services
-# below (rloco-backend + rloco-frontend). Prefer creating from this YAML.
+# Deploy
+#  • Create / update the app from this file (paste YAML, or set spec path: app.yaml).
+#  • CLI: doctl apps create --spec app.yaml
+#
+# A root Dockerfile exists only so “Connect repository” can find a supported file;
+# the real app is the two `services` below (rloco-backend, rloco-frontend), not that image.
 #
 # 1) Add secrets on the `api` component: MONGODB_URI, JWT_SECRET, Twilio, Stripe, …
-# 2) DNS for rloko.com / www per App Platform docs.
+# 2) DNS for rloko.com / www (App Platform domains).
 # 3) Rebuild `web` when VITE_* build args change.
 
 name: rloko
