@@ -61,8 +61,7 @@ ingress:
 services:
   - name: api
     github:
-      # main is missing cmd/server; full API lives on this branch until main is merged.
-      branch: feature/mobile-api-integration
+      branch: main
       deploy_on_push: true
       repo: coderidgetech/rloco-backend
     dockerfile_path: Dockerfile
