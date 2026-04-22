@@ -49,7 +49,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: YOUR_GITHUB_ORG/rloko
+      repo: coderidgetech/rloko
     source_dir: backend
     dockerfile_path: Dockerfile
     http_port: 8080
@@ -80,7 +80,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: YOUR_GITHUB_ORG/rloko
+      repo: coderidgetech/rloko
     source_dir: frontend
     dockerfile_path: Dockerfile
     http_port: 80
