@@ -1,9 +1,14 @@
 # DigitalOcean App Platform — https://rloko.com
 # https://docs.digitalocean.com/products/app-platform/reference/app-spec/
 #
-# 1) Set `github.repo` to your `owner/rloko` (this file assumes the git root is
-#    the `rloko/` monorepo with `backend/` and `frontend/`).
-# 2) In the control panel, add these as encrypted env vars on the `api` component:
+# Deploy: use "App Platform" -> Create -> "From a template / app spec" and paste
+# this file (or: Settings -> App spec -> JSON/YAML from repo path `.do/app.yaml`).
+# Do not rely on autodetect from the `rloko` monorepo root — that repo has no root
+# Dockerfile; `backend/` and `frontend/` are git submodules, so the builder would
+# not see code there unless submodules are initialized. Use these two real repos
+# (Dockerfile at each root) for `api` and `web` instead.
+#
+# 1) In the control panel, add these as encrypted env vars on the `api` component:
 #    MONGODB_URI, JWT_SECRET, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
 #    TWILIO_VERIFY_SERVICE_SID, and any of STRIPE_*, SMTP_*, SHIPPO_*, STORAGE_*
 #    from backend/.env.example
@@ -49,8 +54,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: coderidgetech/rloko
-    source_dir: backend
+      repo: coderidgetech/rloco-backend
     dockerfile_path: Dockerfile
     http_port: 8080
     instance_count: 1
@@ -80,8 +84,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: coderidgetech/rloko
-    source_dir: frontend
+      repo: coderidgetech/rloco-frontend
     dockerfile_path: Dockerfile
     http_port: 80
     instance_count: 1
