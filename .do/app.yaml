@@ -13,6 +13,13 @@
 name: rloko-app
 region: blr
 
+# App-wide envs: some platforms apply these more reliably than per-service (see api JWT).
+envs:
+  - key: JWT_SECRET
+    value: "b53383d58eca2bf5800f60a5a1bc29ce10542d49bf8725b113377d6209878a52055fe546820eb6985a2cd77ebbb5d72f"
+    scope: RUN_TIME
+    type: GENERAL
+
 features:
   - buildpack-stack=ubuntu-22
 
@@ -92,12 +99,7 @@ services:
         value: https://rloko.com,https://www.rloko.com
         scope: RUN_TIME
         type: GENERAL
-      - key: JWT_SECRET
-        # type: GENERAL so doctl / app spec actually injects the value (SECRET in YAML often does not)
-        value: "+qjsEApQfKjkgj58e5N+qwdUH+/rpsT5+SZ243JMwUy6L11GO6DdxOwnIqEQgvI0wBQyx8lo4hKkE+q1wHDkfg=="
-        scope: RUN_TIME
-        type: GENERAL
-      # Add in console (SECRET / RUN_TIME): TWILIO_*, STRIPE_*, etc.
+      # JWT_SECRET is set at app level (envs above). Add in console: TWILIO_*, STRIPE_*, etc.
 
   - name: web
     github:
