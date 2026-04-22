@@ -1,0 +1,32 @@
+# Push `app.yaml` to `main` to deploy, or: Actions → this workflow → Run workflow.
+# Repo secrets (Settings → Secrets and variables → Actions):
+#   DIGITALOCEAN_ACCESS_TOKEN — API token (write for Apps)
+#   DIGITALOCEAN_APP_ID        — e.g. 798ab0a9-47b0-443e-95ca-84a170a0f75f
+name: Deploy to DigitalOcean App Platform
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "app.yaml"
+      - ".do/app.yaml"
+      - ".github/workflows/deploy-digitalocean.yml"
+
+concurrency:
+  group: do-app-platform
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Update app from app.yaml
+        run: doctl apps update "${{ secrets.DIGITALOCEAN_APP_ID }}" --spec app.yaml

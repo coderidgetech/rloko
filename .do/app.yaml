@@ -1,6 +1,7 @@
 # DigitalOcean App Platform — app spec: app.yaml (root). Sync: cp app.yaml .do/app.yaml
 # https://docs.digitalocean.com/products/app-platform/reference/app-spec/
 # CLI: doctl auth init  then  ./scripts/deploy-app-platform.sh
+# CI:  GitHub Actions → .github/workflows/deploy-digitalocean.yml (secrets: DIGITALOCEAN_ACCESS_TOKEN, DIGITALOCEAN_APP_ID)
 # 409 "App name already exists":  DO_APP_ID=<id> ./scripts/deploy-app-platform.sh
 #     (id from: doctl apps list)
 #
