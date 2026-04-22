@@ -92,7 +92,12 @@ services:
         value: https://rloko.com,https://www.rloko.com
         scope: RUN_TIME
         type: GENERAL
-      # Add in console (SECRET / RUN_TIME): JWT_SECRET, TWILIO_*, STRIPE_*, etc.
+      - key: JWT_SECRET
+        # Strong random; rotate in DO if this file was ever public. Prefer UI-only for teams.
+        value: "+qjsEApQfKjkgj58e5N+qwdUH+/rpsT5+SZ243JMwUy6L11GO6DdxOwnIqEQgvI0wBQyx8lo4hKkE+q1wHDkfg=="
+        scope: RUN_TIME
+        type: SECRET
+      # Add in console (SECRET / RUN_TIME): TWILIO_*, STRIPE_*, etc.
 
   - name: web
     github:
