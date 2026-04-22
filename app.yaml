@@ -1,23 +1,25 @@
-# DigitalOcean App Platform — https://rloko.com
+# DigitalOcean App Platform — app spec: app.yaml (root). Sync: cp app.yaml .do/app.yaml
 # https://docs.digitalocean.com/products/app-platform/reference/app-spec/
 #
-# This repo’s spec is this file: app.yaml (at the repository root).
-# `.do/app.yaml` is a copy of the same spec for tools that look only in `.do/`.
-# After changing app.yaml, run:  cp app.yaml .do/app.yaml
-#
-# Deploy
-#  • Create / update the app from this file (paste YAML, or set spec path: app.yaml).
-#  • CLI: doctl apps create --spec app.yaml
-#
-# A root Dockerfile exists only so “Connect repository” can find a supported file;
-# the real app is the two `services` below (rloco-backend, rloco-frontend), not that image.
-#
-# 1) Add secrets on the `api` component: MONGODB_URI, JWT_SECRET, Twilio, Stripe, …
-# 2) DNS for rloko.com / www (App Platform domains).
-# 3) Rebuild `web` when VITE_* build args change.
+# MONGODB_URI is injected from the managed database component below. Add JWT, Twilio, etc. in the console.
+# The root Dockerfile in this monorepo is not a service here — api + web use rloco-backend / rloco-frontend.
 
-name: rloko
-region: nyc
+name: rloko-app
+region: blr
+
+features:
+  - buildpack-stack=ubuntu-22
+
+databases:
+  - name: rloko_mongo
+    engine: MONGODB
+    version: "7"
+    production: true
+    cluster_name: rloko-cluster
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
 
 domains:
   - domain: rloko.com
@@ -57,12 +59,16 @@ services:
       repo: coderidgetech/rloco-backend
     dockerfile_path: Dockerfile
     http_port: 8080
-    instance_count: 1
-    instance_size_slug: basic-xxs
+    instance_count: 2
+    instance_size_slug: apps-s-1vcpu-1gb
     health_check:
       http_path: /health
       initial_delay_seconds: 20
     envs:
+      - key: MONGODB_URI
+        value: ${rloko_mongo.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
       - key: ENV
         value: production
         scope: RUN_TIME
@@ -79,6 +85,7 @@ services:
         value: https://rloko.com,https://www.rloko.com
         scope: RUN_TIME
         type: GENERAL
+      # Add in console (SECRET / RUN_TIME): JWT_SECRET, TWILIO_*, STRIPE_*, etc.
 
   - name: web
     github:
@@ -88,15 +95,9 @@ services:
     dockerfile_path: Dockerfile
     http_port: 80
     instance_count: 1
-    instance_size_slug: basic-xxs
+    instance_size_slug: apps-s-1vcpu-1gb
     envs:
       - key: VITE_API_URL
         value: https://rloko.com/api
         scope: BUILD_TIME
         type: GENERAL
-      # Optional: add in the console (BUILD_TIME) and redeploy — VITE_STRIPE_PUBLISHABLE_KEY,
-      # VITE_GOOGLE_CLIENT_ID, VITE_GOOGLE_MAPS_API_KEY
-
-alerts:
-  - rule: DEPLOYMENT_FAILED
-  - rule: DOMAIN_FAILED
