@@ -4,7 +4,9 @@
 # 409 "App name already exists":  DO_APP_ID=<id> ./scripts/deploy-app-platform.sh
 #     (id from: doctl apps list)
 #
-# MONGODB_URI is injected from the managed database component below. Add JWT, Twilio, etc. in the console.
+# MONGODB_URI uses the App Platform DB component name (must match what’s already in the
+# app — see doctl apps spec get). If update still errors, paste the `databases:` block
+# from that output into this file. Add JWT, Twilio, etc. in the console.
 # The root Dockerfile in this monorepo is not a service here — api + web use rloco-backend / rloco-frontend.
 
 name: rloko-app
@@ -14,8 +16,8 @@ features:
   - buildpack-stack=ubuntu-22
 
 databases:
-  # Name must match ^[a-z][a-z0-9-]{0,30}[a-z0-9]$ (no underscores)
-  - name: rlokomongo
+  # `name` must match the existing component on the app, or the API rejects the update.
+  - name: rloko-cluster
     engine: MONGODB
     version: "7"
     production: true
@@ -70,7 +72,7 @@ services:
       initial_delay_seconds: 20
     envs:
       - key: MONGODB_URI
-        value: ${rlokomongo.DATABASE_URL}
+        value: "${rloko-cluster.DATABASE_URL}"
         scope: RUN_TIME
         type: GENERAL
       - key: ENV
