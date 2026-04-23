@@ -8,6 +8,7 @@ Coordinate API contracts across `backend`, `frontend`, and `mobile-app` when shi
 | API service | `backend/` | REST API, auth, business logic |
 | Web client | `frontend/` | E-commerce web UI |
 | Mobile client | `mobile-app/` | Flutter mobile experience |
+| Droplet deploy | `deploy/droplet/` | Docker Compose + Caddy (see `deploy/droplet/README.md`) |
 
 ## Key Paths
 
@@ -25,3 +26,4 @@ Coordinate API contracts across `backend`, `frontend`, and `mobile-app` when shi
 - Backend: `cd backend && make run`
 - Frontend: `cd frontend && pnpm dev`
 - Mobile: `cd mobile-app && flutter run`
+- Droplet: `cd deploy/droplet && cp .env.example .env` then `docker compose up -d --build`

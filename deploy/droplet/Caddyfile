@@ -1,0 +1,12 @@
+# HTTP. For Let’s Encrypt + HTTPS, replace the first line with:   yourdomain.com, www.yourdomain.com
+# and ensure ports 80/443 + DNS A record to this Droplet.
+
+:80 {
+	@backend path /api* /health /ready
+	handle @backend {
+		reverse_proxy http://api:8080
+	}
+	handle {
+		reverse_proxy http://web:80
+	}
+}

@@ -1,0 +1,84 @@
+# DigitalOcean Droplet: api + web + Caddy + MongoDB (change MONGODB_URI to Managed DB if you prefer).
+# From this directory:  docker compose up -d --build
+#
+# Requires: ../../backend and ../../frontend (rloko monorepo). Copy .env.example to .env first.
+
+name: rloco-droplet
+
+networks:
+  rloco:
+    driver: bridge
+
+volumes:
+  mongo_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - rloco
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Overrides .env (ensure production in container)
+      ENV: production
+      PORT: "8080"
+    networks:
+      - rloco
+    expose:
+      - "8080"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - rloco
+    expose:
+      - "80"
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - rloco
+    depends_on:
+      - web
+      - api
