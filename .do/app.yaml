@@ -13,7 +13,7 @@
 name: rloko-app
 region: blr
 
-# App-wide envs: some platforms apply these more reliably than per-service (see api JWT).
+# JWT_SECRET: also baked into rloco-backend Dockerfile (App Platform often skips spec env for Docker).
 envs:
   - key: JWT_SECRET
     value: "b53383d58eca2bf5800f60a5a1bc29ce10542d49bf8725b113377d6209878a52055fe546820eb6985a2cd77ebbb5d72f"
