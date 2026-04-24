@@ -43,8 +43,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    # env_file is merged first; this default only applies if .env has no ENV.
+    # Staging: set ENV=staging in .env (Twilio optional) until credentials exist.
     environment:
-      ENV: production
+      ENV: ${ENV:-production}
       PORT: "8080"
     networks:
       - rloco
