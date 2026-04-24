@@ -4,7 +4,7 @@ Stack: **MongoDB** (container) + **api** (Go) + **web** (Nginx + Vite build) + *
 
 ## 1. Create a Droplet
 
-- Ubuntu 22.04+, **1–2 GB RAM** minimum (add RAM if you self-host Mongo and expect traffic).  
+- Ubuntu 22.04+, **2 GB RAM** minimum for **on-server** `docker compose --build` (1 GB is very slow; use pre-built images in § "Fast deploy" or a larger Droplet).  
 - Open **SSH**; add **ports 80 and 443** in the **firewall** (Droplet or cloud firewall).
 
 ## 2. Install Docker
@@ -12,6 +12,7 @@ Stack: **MongoDB** (container) + **api** (Go) + **web** (Nginx + Vite build) + *
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
+export DOCKER_BUILDKIT=1
 ```
 
 Re-login, then: `docker compose version`
@@ -36,18 +37,45 @@ nano .env   # set MONGO_ROOT_PASSWORD, JWT_SECRET (openssl rand -hex 64), VITE_*
 - **`MONGODB_URI`**: for the bundled Mongo, keep it aligned with `MONGO_ROOT_PASSWORD` in `.env.example` pattern.  
 - **Managed MongoDB (Atlas / DO):** remove the `mongo` service from `docker-compose.yml`, remove `depends_on: mongo` from `api`, set `MONGODB_URI` to the provider’s URI.
 
-## 5. Start
+## 5. Start (build on the Droplet — can be 30–90+ min on 1 vCPU)
 
 ```bash
-docker compose up -d --build
+DOCKER_BUILDKIT=1 docker compose up -d --build
 ```
 
+**Faster (recommended):** do **not** compile on the Droplet — use **pre-built images** (§ below).
+
 Check: `curl -sS http://127.0.0.1/health` and open `http://<droplet-ip>/` in a browser.
+
+## Fast deploy (GitHub pre-builds, pull only on Droplet)
+
+1. In the **rloko** repo, run the GitHub Action **“Publish Droplet images (GHCR)”** (or push to `main` if it’s enabled for `backend/` and `frontend/` changes).  
+2. Wait for images: `ghcr.io/<your-github-user-lower>/rloco-api` and `.../rloco-web` (see the workflow for exact tags: `latest` and commit SHA).  
+3. On the Droplet, **log in to ghcr** (PAT with `read:packages` for private org packages):
+
+   ```bash
+   echo YOUR_GH_PAT | docker login ghcr.io -u YOUR_GH_USERNAME --password-stdin
+   ```
+
+4. In **`.env`**, set (replace with your real GitHub user, lowercase):
+
+   ```env
+   API_IMAGE=ghcr.io/yourgithubuser/rloco-api:latest
+   WEB_IMAGE=ghcr.io/yourgithubuser/rloco-web:latest
+   ```
+
+5. Start **without** building on the server:
+
+   ```bash
+   docker compose -f docker-compose.ghcr.yml up -d
+   ```
+
+This only **pulls** images (minutes) instead of compiling Go + Vite on a small VM (hours).
 
 ## 6. DNS and HTTPS
 
 - Point **A** (and **AAAA** if IPv6) for `rloko.com` / `www` to the Droplet’s public IP.  
-- For **Let’s Encrypt**, change `Caddyfile` first line from `:80` to your domain, e.g. `rloko.com, www.rloko.com {` — Caddy will request certificates on port 443. Reload: `docker compose restart caddy`.
+- For **Let’s Encrypt**, change `Caddyfile` first line from `:80` to your domain, e.g. `rloko.com, www.rloko.com {` — Caddy will request certificates on port 443. Reload: `docker compose restart caddy` (or the same for `docker-compose.ghcr.yml`).
 
 ## 7. Firewalls (UFW example)
 
@@ -60,7 +88,11 @@ sudo ufw enable
 
 ## 8. Updates
 
+**Build on Droplet:**
+
 ```bash
 cd ~/rloko && git pull
-cd deploy/droplet && docker compose up -d --build
+cd deploy/droplet && DOCKER_BUILDKIT=1 docker compose up -d --build
 ```
+
+**Pre-built images:** run the GitHub Action again, then on the Droplet: `docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d`

@@ -1,0 +1,84 @@
+# Drop-in stack using pre-built images from GitHub Actions (see publish-droplet-images.yml).
+# No Go/Vite compile on the Droplet — fast deploys.
+#
+# 1) Run workflow "Publish Droplet images" on main (or workflow_dispatch).
+# 2) On Droplet: docker login ghcr.io (use a GitHub PAT with read:packages on private org images)
+# 3) Set in .env:
+#    API_IMAGE=ghcr.io/<your-gh-username-lower>/rloco-api:latest
+#    WEB_IMAGE=ghcr.io/<your-gh-username-lower>/rloco-web:latest
+# 4) docker compose -f docker-compose.ghcr.yml up -d
+
+name: rloco-droplet
+
+networks:
+  rloco:
+    driver: bridge
+
+volumes:
+  mongo_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - rloco
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api:
+    image: ${API_IMAGE}
+    pull_policy: always
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ENV: production
+      PORT: "8080"
+    networks:
+      - rloco
+    expose:
+      - "8080"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    image: ${WEB_IMAGE}
+    pull_policy: always
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - rloco
+    expose:
+      - "80"
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - rloco
+    depends_on:
+      - web
+      - api

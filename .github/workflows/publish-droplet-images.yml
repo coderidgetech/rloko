@@ -1,0 +1,69 @@
+# Pre-build api + web images; pull on the Droplet for fast deploys (no compile on 1 vCPU).
+# Pushes to ghcr.io (GitHub Container Registry). Package visibility: same as repo.
+#
+# After: on Droplet, docker login ghcr.io (PAT with read:packages), set IMAGE_* in .env,
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+# Or: copy docker-compose.ghcr-only.yml and replace owner below.
+
+name: Publish Droplet images (GHCR)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/publish-droplet-images.yml"
+
+env:
+  REGISTRY: ghcr.io
+  VITE_API_URL: https://rloko.com/api
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set image names
+        id: name
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "api=${{ env.REGISTRY }}/${OWNER_LC}/rloco-api" >> $GITHUB_OUTPUT
+          echo "web=${{ env.REGISTRY }}/${OWNER_LC}/rloco-web" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.name.outputs.api }}:latest
+            ${{ steps.name.outputs.api }}:${{ github.sha }}
+
+      - name: Build and push web
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          build-args: |
+            VITE_API_URL=${{ env.VITE_API_URL }}
+          push: true
+          tags: |
+            ${{ steps.name.outputs.web }}:latest
+            ${{ steps.name.outputs.web }}:${{ github.sha }}
