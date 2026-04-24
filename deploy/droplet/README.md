@@ -52,11 +52,13 @@ Check: `curl -sS http://127.0.0.1/health` and open `http://<droplet-ip>/` in a b
 
 1. In the **rloko** repo, run the GitHub Action **“Publish Droplet images (GHCR)”** (or push to `main` if it’s enabled for `backend/` and `frontend/` changes).  
 2. Wait for images: `ghcr.io/<your-github-user-lower>/rloco-api` and `.../rloco-web` (see the workflow for exact tags: `latest` and commit SHA).  
-3. On the Droplet, **log in to ghcr** (PAT with `read:packages` for private org packages):
+3. On the Droplet, **log in to ghcr** (classic PAT with **read:packages**; for an **org** with **SSO**, open the org → *Settings* → *Personal access tokens* and **authorize** the token):
 
    ```bash
    echo YOUR_GH_PAT | docker login ghcr.io -u YOUR_GH_USERNAME --password-stdin
    ```
+
+   If you see `denied: denied` on **login** (not pull): the PAT is wrong, expired, missing `read:packages`, or the username is not the **GitHub user** that owns the PAT. Fix the token, then re-login. You can also log in **once** interactively and run `./deploy.sh --skip-login` with `GHCR_PAT` **unset** so the script does not re-run login.
 
 4. In **`.env`**, set (replace with your real GitHub user, lowercase):
 

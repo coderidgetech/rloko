@@ -10,6 +10,7 @@ export DOCKER_BUILDKIT=1
 
 MODE="ghcr"
 SKIP_GIT=0
+SKIP_LOGIN=0
 NO_PULL=0
 PUBLIC_HOST="${PUBLIC_HOST:-dev.rloko.com}"
 
@@ -21,13 +22,14 @@ Usage: deploy.sh [ghcr|build] [options]
   build             git pull → docker compose build on this Droplet (slow)
 
 Options:
-  --skip-git   Skip git pull and submodule update
-  --no-pull    (ghcr only) Skip "docker compose pull" (only recreate containers)
-  -h, --help   This help
+  --skip-git     Skip git pull and submodule update
+  --skip-login   (ghcr) Skip docker login (use if already logged in, or public images)
+  --no-pull      (ghcr only) Skip "docker compose pull" (only recreate containers)
+  -h, --help     This help
 
 Environment (optional, ghcr):
-  GHCR_PAT or GHCR_TOKEN  PAT with read:packages; if set, logs in to ghcr.io
-  GHCR_USER or GITHUB_USER  GitHub username (for docker login)
+  GHCR_PAT or GHCR_TOKEN  Personal access token; if set, runs docker login before pull
+  GHCR_USER or GITHUB_USER  Your GitHub username (not org name, not email)
   PUBLIC_HOST  Hostname in Caddy for the local /health check (default: dev.rloko.com)
 
 Prerequisites: .env in this directory; for ghcr, set API_IMAGE and WEB_IMAGE in .env.
@@ -37,8 +39,9 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     ghcr|build) MODE="$1"; shift ;;
-    --skip-git) SKIP_GIT=1; shift ;;
-    --no-pull)  NO_PULL=1;  shift ;;
+    --skip-git)   SKIP_GIT=1;   shift ;;
+    --skip-login) SKIP_LOGIN=1; shift ;;
+    --no-pull)    NO_PULL=1;    shift ;;
     -h|--help)  usage; exit 0 ;;
     *)
       if [ "${1#-}" != "$1" ]; then echo "Unknown option: $1" >&2; usage; exit 1; fi
@@ -78,14 +81,30 @@ COMPOSE_BUILD=(docker compose -f "$DIR/docker-compose.yml")
 
 if [ "$MODE" = "ghcr" ]; then
   PAT="${GHCR_PAT:-${GHCR_TOKEN:-}}"
-  if [ -n "$PAT" ]; then
+  if [ -n "$PAT" ] && [ "$SKIP_LOGIN" -eq 0 ]; then
     GUSER="${GHCR_USER:-${GITHUB_USER:-}}"
     if [ -z "$GUSER" ]; then
       echo "Set GHCR_USER or GITHUB_USER to log in to ghcr.io" >&2
       exit 1
     fi
     echo "==> docker login ghcr.io (user: $GUSER)"
-    echo "$PAT" | docker login ghcr.io -u "$GUSER" --password-stdin
+    if ! echo "$PAT" | docker login ghcr.io -u "$GUSER" --password-stdin; then
+      cat <<'EOT' >&2
+
+GHCR login failed (denied). Fix one of:
+  • Create a new classic PAT: https://github.com/settings/tokens — scope: read:packages
+    (use write:packages only if this machine pushes images)
+  • Fine-grained token: allow "read" for packages of the org/user that owns the image
+  • Organization with SAML/SSO: GitHub → org → Settings → Personal access tokens → Enable SSO for your token
+  • Username must be your GitHub username (the account that owns the PAT), not the org name
+  • Or skip automated login:  unset GHCR_PAT  and  ./deploy.sh --skip-login  (after: docker login ghcr.io -u YOUR_USER)
+  • Public packages: unset GHCR_PAT; pull may work without login
+
+EOT
+      exit 1
+    fi
+  elif [ -n "$PAT" ] && [ "$SKIP_LOGIN" -ne 0 ]; then
+    echo "==> skipping docker login (--skip-login); using existing registry auth"
   fi
 
   if [ "$NO_PULL" -eq 0 ]; then
