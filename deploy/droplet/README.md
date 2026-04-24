@@ -65,11 +65,23 @@ Check: `curl -sS http://127.0.0.1/health` and open `http://<droplet-ip>/` in a b
    WEB_IMAGE=ghcr.io/yourgithubuser/rloco-web:latest
    ```
 
-5. Start **without** building on the server:
+5. Start **without** building on the server (or use the script in step 5b).
 
    ```bash
    docker compose -f docker-compose.ghcr.yml up -d
    ```
+
+   **5b. One-command script (recommended):** from `deploy/droplet`, after `.env` is configured and GitHub has published images:
+
+   ```bash
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+   - Pulls the monorepo and submodules, `docker compose pull` + `up -d` (GHCR), prints `docker compose ps` and a local `/health` check.  
+   - Optional: `export GHCR_PAT=...` and `export GHCR_USER=yourgithubuser` (or `GITHUB_USER`) so the script can `docker login ghcr.io` before pull.  
+   - Flags: `./deploy.sh --skip-git` (no `git pull`), `./deploy.sh --no-pull` (recreate only), `./deploy.sh --help`.  
+   - On-server compile (slow): `./deploy.sh build`
 
 This only **pulls** images (minutes) instead of compiling Go + Vite on a small VM (hours).
 
@@ -97,4 +109,4 @@ cd ~/rloko && git pull
 cd deploy/droplet && DOCKER_BUILDKIT=1 docker compose up -d --build
 ```
 
-**Pre-built images:** run the GitHub Action again, then on the Droplet: `docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d`
+**Pre-built images:** run the GitHub Action again, then on the Droplet: `cd deploy/droplet && ./deploy.sh` (or `docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d`)
