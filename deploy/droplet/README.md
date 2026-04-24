@@ -103,7 +103,32 @@ sudo ufw allow 443/tcp
 sudo ufw enable
 ```
 
-## 8. Updates
+## 8. Seed data (empty Mongo)
+
+The backend ships a Go seed: **`backend/migrations/seed.go`**. It creates:
+
+| What | Notes |
+|------|--------|
+| **Admin user** | `admin@rloko.com` / `admin123` (skipped if insert fails / duplicate) |
+| **Categories** | Women, Men, Dresses, Accessories (upsert by slug) |
+| **Videos** | 8 inspiration rows — **only if** `videos` collection is empty |
+| **Products** | 8 sample products — **only if** `products` is empty |
+
+**Local (with Go):** from `rloko/backend`, `export MONGODB_URI=...` then `make seed` or `go run migrations/seed.go`.
+
+**On the Droplet (compose Mongo, same `.env` as deploy):** with the stack running and `backend/` present (submodule),
+
+```bash
+cd deploy/droplet
+chmod +x seed.sh
+./seed.sh
+```
+
+This runs a one-off `golang:1.24-alpine` container on the same Docker network as `mongo`, so `MONGODB_URI=...@mongo:27017/...` from `.env` works. First run downloads Go modules (can take a few minutes).
+
+**Change the default admin password** in production after seeding.
+
+## 9. Updates
 
 **Build on Droplet:**
 
