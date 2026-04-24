@@ -12,13 +12,16 @@ on:
   push:
     branches: [main]
     paths:
+      - "backend"
       - "backend/**"
+      - "frontend"
       - "frontend/**"
       - ".github/workflows/publish-droplet-images.yml"
 
 env:
   REGISTRY: ghcr.io
-  VITE_API_URL: https://rloko.com/api
+  # Baked into the web image; must match droplet Caddy host + /api. Switch to prod when ready.
+  VITE_API_URL: https://dev.rloko.com/api
 
 jobs:
   push:
