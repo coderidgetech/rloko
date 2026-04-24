@@ -9,11 +9,11 @@ trap "rm -f $COOKIE_FILE" EXIT
 echo "Logging in as admin..."
 LOGIN_RESP=$(curl -s -c "$COOKIE_FILE" -X POST "${API_URL}/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"admin@rloco.com","password":"admin123"}')
+    -d '{"email":"admin@rloko.com","password":"admin123"}')
 if echo "$LOGIN_RESP" | jq -e '.error' >/dev/null 2>&1; then
     echo "Login failed: $(echo "$LOGIN_RESP" | jq -r '.error')"
     echo "Run backend seed first: MONGODB_URI=mongodb://admin:password@localhost:28017/rloco?authSource=admin go run backend/migrations/seed.go"
-    echo "Then activate admin: docker exec rloco-mongodb mongosh --quiet -u admin -p password --authenticationDatabase admin rloco --eval 'db.users.updateOne({email:\"admin@rloco.com\"}, {\$set: {active: true}})'"
+    echo "Then activate admin: docker exec rloco-mongodb mongosh --quiet -u admin -p password --authenticationDatabase admin rloco --eval 'db.users.updateOne({email:\"admin@rloko.com\"}, {\$set: {active: true}})'"
     exit 1
 fi
 echo "Logged in successfully."

@@ -11,7 +11,7 @@ trap "rm -f $COOKIE_FILE" EXIT
 echo "Logging in as admin..."
 LOGIN_RESP=$(curl -s -c "$COOKIE_FILE" -X POST "${API_URL}/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"admin@rloco.com","password":"admin123"}')
+    -d '{"email":"admin@rloko.com","password":"admin123"}')
 if echo "$LOGIN_RESP" | jq -e '.error' >/dev/null 2>&1; then
     echo "Login failed: $(echo "$LOGIN_RESP" | jq -r '.error')"
     exit 1
