@@ -43,8 +43,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # env_file is merged first; this default only applies if .env has no ENV.
-    # Staging: set ENV=staging in .env (Twilio optional) until credentials exist.
+    # env_file is merged; ${ENV:-production} is resolved from .env in this directory.
+    # Dev host with same creds as prod: set ENV=production in .env (default) and dev URLs only.
     environment:
       ENV: ${ENV:-production}
       PORT: "8080"

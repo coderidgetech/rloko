@@ -33,7 +33,8 @@ cp .env.example .env
 nano .env   # set MONGO_ROOT_PASSWORD, JWT_SECRET (openssl rand -hex 64), VITE_*, Twilio, APP_BASE_URL, CORS, MONGODB_URI (match mongo password)
 ```
 
-- **`VITE_API_URL`**: e.g. `https://rloko.com/api` (your real domain, HTTPS). Rebuild `web` after any change: `docker compose up -d --build web`  
+- **`VITE_API_URL`**: e.g. `https://dev.rloko.com/api` (must match Caddy host + workflow `VITE_API_URL` for GHCR images). Rebuild/republish `web` after a URL change.  
+- **Same credentials on dev as production:** set **`ENV=production`** in `.env` (default in `.env.example`) and use the same **`TWILIO_*`**, **`JWT_SECRET`**, and **Mongo** string as you would in prod; only **public URLs** need to be `https://dev.rloko.com` (`APP_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `VITE_API_URL`).  
 - **`MONGODB_URI`**: for the bundled Mongo, keep it aligned with `MONGO_ROOT_PASSWORD` in `.env.example` pattern.  
 - **Managed MongoDB (Atlas / DO):** remove the `mongo` service from `docker-compose.yml`, remove `depends_on: mongo` from `api`, set `MONGODB_URI` to the provider’s URI.
 
@@ -74,8 +75,9 @@ This only **pulls** images (minutes) instead of compiling Go + Vite on a small V
 
 ## 6. DNS and HTTPS
 
-- Point **A** (and **AAAA** if IPv6) for `rloko.com` / `www` to the Droplet’s public IP.  
-- For **Let’s Encrypt**, change `Caddyfile` first line from `:80` to your domain, e.g. `rloko.com, www.rloko.com {` — Caddy will request certificates on port 443. Reload: `docker compose restart caddy` (or the same for `docker-compose.ghcr.yml`).
+- **Subdomain in GoDaddy (e.g. `dev.rloko.com`):** add an **A** record: **Name** = `dev`, **Value** = Droplet public IP (not `@` — that’s the apex; `dev` is the subdomain). TTL default is fine.  
+- **Let’s Encrypt:** the committed `Caddyfile` uses `dev.rloko.com` — Caddy requests certs on 443 once DNS points here. Reload after edits: `docker compose -f docker-compose.ghcr.yml restart caddy` (or full path from `deploy/droplet`).  
+- For a quick test **before** DNS, you can set Caddy to `:80 {` and use the Droplet IP in a browser; switch back to `dev.rloko.com` for HTTPS.
 
 ## 7. Firewalls (UFW example)
 
