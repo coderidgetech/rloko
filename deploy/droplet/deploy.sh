@@ -133,4 +133,9 @@ else
   echo "    /health check failed (wrong PUBLIC_HOST? try: PUBLIC_HOST=your.caddy.host ./deploy.sh)" >&2
 fi
 
+echo "==> curl (from this host or your laptop; health is /health, not /api/health)"
+echo "    curl -sS -H \"Host: $PUBLIC_HOST\" http://127.0.0.1/health"
+echo "    curl -sS https://$PUBLIC_HOST/health"
+echo "    curl -sS https://$PUBLIC_HOST/api/config   # needs Mongo + seed"
+
 echo "==> Done ($MODE)."
