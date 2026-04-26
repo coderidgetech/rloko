@@ -34,6 +34,7 @@ nano .env   # set MONGO_ROOT_PASSWORD, JWT_SECRET (openssl rand -hex 64), VITE_*
 ```
 
 - **`VITE_API_URL`**: e.g. `https://dev.rloko.com/api` (must match Caddy host + workflow `VITE_API_URL` for GHCR images). Rebuild/republish `web` after a URL change.  
+- **Google Sign-In:** `VITE_GOOGLE_CLIENT_ID` is baked in at **web image build** time. For pre-built GHCR images, set GitHub **Actions secret** `VITE_GOOGLE_CLIENT_ID`, then re-run **Publish Droplet images** and `pull` the new `web` image. (Putting it only in Droplet `deploy/droplet/.env` does **not** change an already-built image.) For **`./deploy.sh build`** on the server, add the same var to `deploy/droplet/.env` so the compose `build` picks it up.  
 - **Same credentials on dev as production:** set **`ENV=production`** in `.env` (default in `.env.example`) and use the same **`TWILIO_*`**, **`JWT_SECRET`**, and **Mongo** string as you would in prod; only **public URLs** need to be `https://dev.rloko.com` (`APP_BASE_URL`, `CORS_ALLOWED_ORIGINS`, `VITE_API_URL`).  
 - **`MONGODB_URI`**: for the bundled Mongo, keep it aligned with `MONGO_ROOT_PASSWORD` in `.env.example` pattern.  
 - **Managed MongoDB (Atlas / DO):** remove the `mongo` service from `docker-compose.yml`, remove `depends_on: mongo` from `api`, set `MONGODB_URI` to the provider’s URI.
