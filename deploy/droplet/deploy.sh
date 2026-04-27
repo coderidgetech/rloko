@@ -19,7 +19,7 @@ usage() {
 Usage: deploy.sh [ghcr|build] [options]
 
   ghcr   (default)  git pull → docker login (optional) → pull images → up -d
-  build             git pull → docker compose build on this Droplet (slow)
+  build             git pull → docker compose build on this Droplet (slow; VITE_* from .env is baked in)
 
 Options:
   --skip-git     Skip git pull and submodule update
@@ -59,6 +59,13 @@ fi
 
 cd "$DIR"
 
+# Pre-built web images ignore VITE_* in .env; user must use `build` or GitHub Actions to bake them.
+if [ "$MODE" = "ghcr" ] && grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env 2>/dev/null; then
+  echo "NOTE: You have VITE_GOOGLE_CLIENT_ID in .env, but ghcr mode uses a pre-built web image —" >&2
+  echo "      that value is NOT in the running site until you:  ./deploy.sh build" >&2
+  echo "      or set GitHub secret VITE_GOOGLE_CLIENT_ID and re-run Publish Droplet images (GHCR)." >&2
+fi
+
 if [ "$MODE" = "ghcr" ]; then
   if ! grep -qE '^[[:space:]]*API_IMAGE=.[[:alnum:]:._/-]+' .env; then
     echo "In .env, set API_IMAGE= (and WEB_IMAGE=), e.g. ghcr.io/org/rloco-api:latest" >&2
@@ -77,7 +84,8 @@ if [ "$SKIP_GIT" -eq 0 ]; then
 fi
 
 COMPOSE_GHCR=(docker compose -f "$DIR/docker-compose.ghcr.yml")
-COMPOSE_BUILD=(docker compose -f "$DIR/docker-compose.yml")
+# --env-file forces substitution for build.args (VITE_*) from this file even if cwd were wrong
+COMPOSE_BUILD=(docker compose --env-file "$DIR/.env" -f "$DIR/docker-compose.yml")
 
 if [ "$MODE" = "ghcr" ]; then
   PAT="${GHCR_PAT:-${GHCR_TOKEN:-}}"
@@ -118,7 +126,12 @@ EOT
   "${COMPOSE_GHCR[@]}" up -d
   PS_CMD=("${COMPOSE_GHCR[@]}")
 else
-  echo "==> docker compose up -d --build (local build, may take a long time)"
+  echo "==> docker compose build (VITE_* from $DIR/.env via --env-file — run after changing VITE_GOOGLE_CLIENT_ID)"
+  if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env; then
+    echo "WARNING: VITE_GOOGLE_CLIENT_ID is missing or empty in .env — Google Sign-In will stay 'not configured'." >&2
+  fi
+  "${COMPOSE_BUILD[@]}" build --no-cache web
+  echo "==> docker compose up -d --build"
   "${COMPOSE_BUILD[@]}" up -d --build
   PS_CMD=("${COMPOSE_BUILD[@]}")
 fi
