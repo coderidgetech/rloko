@@ -98,7 +98,16 @@ fi
 
 if [ "$SKIP_GIT" -eq 0 ]; then
   echo "==> Git: pull + submodules (repo: $RLOKO_ROOT)"
-  git -C "$RLOKO_ROOT" pull --rebase 2>/dev/null || git -C "$RLOKO_ROOT" pull
+  if ! { git -C "$RLOKO_ROOT" pull --rebase 2>/dev/null || git -C "$RLOKO_ROOT" pull; }; then
+    cat <<'EOT' >&2
+Git pull failed. If you see "Could not resolve host: github.com", fix DNS on this machine.
+  • Try:  getent hosts github.com
+  • Often works:  sudo resolvectl dns eth0 1.1.1.1 8.8.8.8   (replace eth0: ip -br a)
+  • Or add in /etc/netplan/ under ethernets:→YOUR_IFACE:  nameservers: { addresses: [1.1.1.1,8.8.8.8] }  then  sudo netplan apply
+  • Deploy without updating repo:  ./deploy.sh ghcr --skip-git
+EOT
+    exit 1
+  fi
   git -C "$RLOKO_ROOT" submodule update --init --recursive
 fi
 
