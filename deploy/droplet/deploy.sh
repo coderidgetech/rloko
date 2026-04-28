@@ -8,11 +8,14 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 RLOKO_ROOT="$(cd "$DIR/../.." && pwd)"
 export DOCKER_BUILDKIT=1
+# Slow pulls / large image layers on small links (default 300s can be tight)
+export DOCKER_CLIENT_TIMEOUT="${DOCKER_CLIENT_TIMEOUT:-600}"
 
 MODE="ghcr"
 SKIP_GIT=0
 SKIP_LOGIN=0
 NO_PULL=0
+LOGFILE=""
 PUBLIC_HOST="${PUBLIC_HOST:-dev.rloko.com}"
 
 usage() {
@@ -26,7 +29,8 @@ Usage: deploy.sh [ghcr|build-web|build] [options]
 Options:
   --skip-git     Skip git pull and submodule update
   --skip-login   (ghcr) Skip docker login (use if already logged in, or public images)
-  --no-pull      (ghcr only) Skip "docker compose pull" (only recreate containers)
+  --no-pull      (ghcr / build-web) Skip image pull
+  --log FILE     Append all output to FILE (use if SSH may drop — you can tail -f FILE)
   -h, --help     This help
 
 Environment (optional, ghcr):
@@ -47,6 +51,11 @@ while [ $# -gt 0 ]; do
     --skip-git)   SKIP_GIT=1;   shift ;;
     --skip-login) SKIP_LOGIN=1; shift ;;
     --no-pull)    NO_PULL=1;    shift ;;
+    --log)
+      if [ $# -lt 2 ] || [ -z "${2:-}" ]; then echo "--log needs a file path" >&2; exit 1; fi
+      LOGFILE="$2"
+      shift 2
+      ;;
     -h|--help)  usage; exit 0 ;;
     *)
       if [ "${1#-}" != "$1" ]; then echo "Unknown option: $1" >&2; usage; exit 1; fi
@@ -56,6 +65,12 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -n "$LOGFILE" ]; then
+  # shellcheck disable=SC2094
+  exec > >(tee -a "$LOGFILE") 2>&1
+  echo "==> Logging to $LOGFILE (start: $(date -Iseconds 2>/dev/null || date))"
+fi
 
 if [ ! -f "$DIR/.env" ]; then
   echo "No $DIR/.env — run: cp .env.example .env && edit .env" >&2
@@ -148,6 +163,18 @@ elif [ "$MODE" = "build-web" ]; then
     echo "==> pull api image from GHCR (web is built locally, not pulled)"
     "${COMPOSE_GHCR[@]}" pull api
   fi
+  cat <<'EOT' >&2
+
+-- build-web can take 15–45+ minutes on a 1 vCPU/1GB Droplet. If your SSH client times out, the
+   build is killed and containers may not start. Use ONE of:
+   • tmux:   sudo apt install -y tmux 2>/dev/null; tmux new -s deploy   # then run this script again
+   • log:    ./deploy.sh build-web --log /tmp/rloko-deploy.log --skip-git
+   • nohup:  nohup ./deploy.sh build-web --skip-git --log /tmp/rloko-deploy.log </dev/null & disown
+   Reconnect, then: tail -f /tmp/rloko-deploy.log
+   If build already finished and only 'up' is missing, from deploy/droplet:
+   docker compose --env-file .env -f docker-compose.ghcr.yml -f docker-compose.ghcr-web-build.yml up -d
+
+EOT
   echo "==> docker compose build web (uses BuildKit cache; 5–20+ min on first run)"
   "${COMPOSE_WEB_BAKE[@]}" build web
   echo "==> docker compose up -d"
@@ -155,7 +182,7 @@ elif [ "$MODE" = "build-web" ]; then
   PS_CMD=("${COMPOSE_WEB_BAKE[@]}")
 
 else
-  echo "==> full build: Go api + Vite web on this host — if this hangs, Ctrl+C and use: ./deploy.sh build-web" >&2
+  echo "==> full build: Go api + Vite web on this host (use tmux; or ./deploy.sh build-web)" >&2
   if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env; then
     echo "WARNING: VITE_GOOGLE_CLIENT_ID is missing or empty in .env — Google Sign-In will stay 'not configured'." >&2
   fi
@@ -167,7 +194,7 @@ echo "==> Services"
 "${PS_CMD[@]}" ps
 
 echo "==> Health (Host: $PUBLIC_HOST → http://127.0.0.1/health)"
-if code=$(curl -sfS -o /dev/null -w '%{http_code}' -H "Host: $PUBLIC_HOST" "http://127.0.0.1/health" 2>/dev/null); then
+if code=$(curl -sfS --connect-timeout 3 --max-time 12 -o /dev/null -w '%{http_code}' -H "Host: $PUBLIC_HOST" "http://127.0.0.1/health" 2>/dev/null); then
   echo "    /health => HTTP $code"
 else
   echo "    /health check failed (wrong PUBLIC_HOST? try: PUBLIC_HOST=your.caddy.host ./deploy.sh)" >&2
