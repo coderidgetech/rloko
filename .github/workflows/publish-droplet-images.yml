@@ -22,8 +22,9 @@ env:
   REGISTRY: ghcr.io
   # Baked into the web image; must match droplet Caddy host + /api. Switch to prod when ready.
   VITE_API_URL: https://dev.rloko.com/api
-  # OAuth client id is public in the browser, but we still pass via GitHub so it is not in the repo.
-  # Set repository secret: Settings → Secrets and variables → Actions → VITE_GOOGLE_CLIENT_ID
+  # Optional web build args (same names as in frontend/Dockerfile). Set as repo *Secrets* if used:
+  #   VITE_GOOGLE_CLIENT_ID  (Google Sign-In)
+  #   VITE_STRIPE_PUBLISHABLE_KEY, VITE_GOOGLE_MAPS_API_KEY
 
 jobs:
   push:
@@ -69,6 +70,8 @@ jobs:
           build-args: |
             VITE_API_URL=${{ env.VITE_API_URL }}
             VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+            VITE_STRIPE_PUBLISHABLE_KEY=${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+            VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           push: true
           tags: |
             ${{ steps.name.outputs.web }}:latest
