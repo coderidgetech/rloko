@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # R-Loko Droplet — one-command deploy from this directory.
-# Usage: ./deploy.sh          # fast path: GHCR images
-#        ./deploy.sh build    # slow: compile api+web on the server
+# Usage: ./deploy.sh              # fast path: all images from GHCR
+#        ./deploy.sh build-web  # only rebuild frontend (Vite) here — keep api from GHCR (preferred for small VMs)
+#        ./deploy.sh build      # compile Go api + Vite web on the server (very slow / may OOM on 1 vCPU/1GB)
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -16,10 +17,11 @@ PUBLIC_HOST="${PUBLIC_HOST:-dev.rloko.com}"
 
 usage() {
   cat <<'EOF'
-Usage: deploy.sh [ghcr|build] [options]
+Usage: deploy.sh [ghcr|build-web|build] [options]
 
-  ghcr   (default)  git pull → docker login (optional) → pull images → up -d
-  build             git pull → docker compose build on this Droplet (slow; VITE_* from .env is baked in)
+  ghcr (default)  git pull → pull GHCR → up (no compile on the Droplet)
+  build-web       same + build ONLY the web (Vite) image from .env; api/mongo stay GHCR — use for VITE_GOOGLE_*
+  build           build api (Go) + web (Vite) on the Droplet — can take 30–90+ min on a small plan or run out of RAM
 
 Options:
   --skip-git     Skip git pull and submodule update
@@ -32,20 +34,23 @@ Environment (optional, ghcr):
   GHCR_USER or GITHUB_USER  Your GitHub username (not org name, not email)
   PUBLIC_HOST  Hostname in Caddy for the local /health check (default: dev.rloko.com)
 
-Prerequisites: .env in this directory; for ghcr, set API_IMAGE and WEB_IMAGE in .env.
+Prerequisites: .env in this directory.
+  • ghcr:     API_IMAGE and WEB_IMAGE
+  • build-web: API_IMAGE (WEB_IMAGE not used); VITE_* baked from .env
+  • build:    VITE_* from .env; no GHCR image tags required for local build
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    ghcr|build) MODE="$1"; shift ;;
+    ghcr|build|build-web) MODE="$1"; shift ;;
     --skip-git)   SKIP_GIT=1;   shift ;;
     --skip-login) SKIP_LOGIN=1; shift ;;
     --no-pull)    NO_PULL=1;    shift ;;
     -h|--help)  usage; exit 0 ;;
     *)
       if [ "${1#-}" != "$1" ]; then echo "Unknown option: $1" >&2; usage; exit 1; fi
-      echo "Unknown argument: $1 (use ghcr or build)" >&2
+      echo "Unknown argument: $1 (use ghcr, build-web, or build — update script: git pull in repo root)" >&2
       usage
       exit 1
       ;;
@@ -59,19 +64,18 @@ fi
 
 cd "$DIR"
 
-# Pre-built web images ignore VITE_* in .env; user must use `build` or GitHub Actions to bake them.
+# Pre-built web images ignore VITE_* in .env; bake with build-web, full build, or GitHub Actions.
 if [ "$MODE" = "ghcr" ] && grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env 2>/dev/null; then
-  echo "NOTE: You have VITE_GOOGLE_CLIENT_ID in .env, but ghcr mode uses a pre-built web image —" >&2
-  echo "      that value is NOT in the running site until you:  ./deploy.sh build" >&2
-  echo "      or set GitHub secret VITE_GOOGLE_CLIENT_ID and re-run Publish Droplet images (GHCR)." >&2
+  echo "NOTE: VITE_GOOGLE_CLIENT_ID in .env is not used in ghcr mode. Use:  ./deploy.sh build-web" >&2
+  echo "      (or GitHub secret VITE_GOOGLE_CLIENT_ID + Publish Droplet images)." >&2
 fi
 
-if [ "$MODE" = "ghcr" ]; then
+if [ "$MODE" = "ghcr" ] || [ "$MODE" = "build-web" ]; then
   if ! grep -qE '^[[:space:]]*API_IMAGE=.[[:alnum:]:._/-]+' .env; then
-    echo "In .env, set API_IMAGE= (and WEB_IMAGE=), e.g. ghcr.io/org/rloco-api:latest" >&2
+    echo "In .env, set API_IMAGE=, e.g. ghcr.io/org/rloco-api:latest" >&2
     exit 1
   fi
-  if ! grep -qE '^[[:space:]]*WEB_IMAGE=.[[:alnum:]:._/-]+' .env; then
+  if [ "$MODE" = "ghcr" ] && ! grep -qE '^[[:space:]]*WEB_IMAGE=.[[:alnum:]:._/-]+' .env; then
     echo "In .env, set WEB_IMAGE= (e.g. ghcr.io/org/rloco-web:latest)" >&2
     exit 1
   fi
@@ -84,6 +88,7 @@ if [ "$SKIP_GIT" -eq 0 ]; then
 fi
 
 COMPOSE_GHCR=(docker compose -f "$DIR/docker-compose.ghcr.yml")
+COMPOSE_WEB_BAKE=(docker compose --env-file "$DIR/.env" -f "$DIR/docker-compose.ghcr.yml" -f "$DIR/docker-compose.ghcr-web-build.yml")
 # --env-file forces substitution for build.args (VITE_*) from this file even if cwd were wrong
 COMPOSE_BUILD=(docker compose --env-file "$DIR/.env" -f "$DIR/docker-compose.yml")
 
@@ -125,13 +130,35 @@ EOT
   echo "==> docker compose up -d (ghcr)"
   "${COMPOSE_GHCR[@]}" up -d
   PS_CMD=("${COMPOSE_GHCR[@]}")
+
+elif [ "$MODE" = "build-web" ]; then
+  echo "==> build-web: pull api (GHCR) + build only the web (Vite) from $DIR/.env (small VM–friendly)"
+  if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env; then
+    echo "WARNING: VITE_GOOGLE_CLIENT_ID empty in .env — Google Sign-In may show 'not configured'." >&2
+  fi
+  PAT="${GHCR_PAT:-${GHCR_TOKEN:-}}"
+  if [ -n "$PAT" ] && [ "$SKIP_LOGIN" -eq 0 ]; then
+    GUSER="${GHCR_USER:-${GITHUB_USER:-}}"
+    if [ -n "$GUSER" ]; then
+      echo "==> docker login ghcr.io (user: $GUSER)"
+      echo "$PAT" | docker login ghcr.io -u "$GUSER" --password-stdin
+    fi
+  fi
+  if [ "$NO_PULL" -eq 0 ]; then
+    echo "==> pull api image from GHCR (web is built locally, not pulled)"
+    "${COMPOSE_GHCR[@]}" pull api
+  fi
+  echo "==> docker compose build web (uses BuildKit cache; 5–20+ min on first run)"
+  "${COMPOSE_WEB_BAKE[@]}" build web
+  echo "==> docker compose up -d"
+  "${COMPOSE_WEB_BAKE[@]}" up -d
+  PS_CMD=("${COMPOSE_WEB_BAKE[@]}")
+
 else
-  echo "==> docker compose build (VITE_* from $DIR/.env via --env-file — run after changing VITE_GOOGLE_CLIENT_ID)"
+  echo "==> full build: Go api + Vite web on this host — if this hangs, Ctrl+C and use: ./deploy.sh build-web" >&2
   if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env; then
     echo "WARNING: VITE_GOOGLE_CLIENT_ID is missing or empty in .env — Google Sign-In will stay 'not configured'." >&2
   fi
-  "${COMPOSE_BUILD[@]}" build --no-cache web
-  echo "==> docker compose up -d --build"
   "${COMPOSE_BUILD[@]}" up -d --build
   PS_CMD=("${COMPOSE_BUILD[@]}")
 fi

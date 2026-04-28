@@ -1,0 +1,22 @@
+# Merge with docker-compose.ghcr.yml: replace pulled `web` with a *local* Vite build (VITE_* from .env).
+# API + mongo + caddy stay on GHCR images — only frontend compiles on the Droplet.
+#
+#   docker compose -f docker-compose.ghcr.yml -f docker-compose.ghcr-web-build.yml --env-file .env build web
+#   docker compose -f docker-compose.ghcr.yml -f docker-compose.ghcr-web-build.yml --env-file .env up -d
+#
+# Use: ./deploy.sh build-web   (or publish web from CI with VITE in GitHub secrets)
+
+name: rloco-droplet
+
+services:
+  web:
+    image: rloco-web-local
+    pull_policy: never
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
