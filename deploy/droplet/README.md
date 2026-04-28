@@ -31,6 +31,7 @@ cd rloko/deploy/droplet
 ```bash
 cp .env.example .env
 nano .env   # set MONGO_ROOT_PASSWORD, JWT_SECRET (openssl rand -hex 64), VITE_*, Twilio, APP_BASE_URL, CORS, MONGODB_URI (match mongo password)
+# Optional Shippo: set SHIPPO_API_KEY and SHIPPO_FROM_* in the same file (see .env.example) for live /api/shipping/calculate rates.
 ```
 
 - **`VITE_API_URL`**: e.g. `https://dev.rloko.com/api` (must match Caddy host + workflow `VITE_API_URL` for GHCR images). Rebuild/republish `web` after a URL change.  
