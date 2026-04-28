@@ -81,13 +81,28 @@ Check: `curl -sS http://127.0.0.1/health` and open `http://<droplet-ip>/` in a b
    ./deploy.sh
    ```
 
-   - Pulls the monorepo and submodules, `docker compose pull` + `up -d` (GHCR), prints `docker compose ps` and a local `/health` check.  
+   - Pulls the monorepo (`git pull` at repo root), **submodules skipped by default** (not required for GHCR), then `docker compose pull api web` + `up -d`, `ps`, and a local `/health` check.  
    - Optional: `export GHCR_PAT=...` and `export GHCR_USER=yourgithubuser` (or `GITHUB_USER`) so the script can `docker login ghcr.io` before pull.  
-   - Flags: `./deploy.sh --skip-git` (no `git pull`), `./deploy.sh --no-pull` (recreate only), `./deploy.sh --help`.  
+   - Fast paths: `./deploy.sh env` (only `.env` to api), `./deploy.sh quick` (no git, no pull), `./deploy.sh --skip-git`, `./deploy.sh --no-pull`, `./deploy.sh --init-submodules`, `./deploy.sh --help`.  
    - On-server compile (slow): `./deploy.sh build`  
    - **502 on `/api/*`:** run `chmod +x diagnose.sh && ./diagnose.sh` and read the **api** logs (usually Mongo URI/password, or `CORS` / `JWT` in production). After **server-side** code changes, re-run **Publish Droplet images (GHCR)** and `./deploy.sh` to pull a new `api` image.
 
 This only **pulls** images (minutes) instead of compiling Go + Vite on a small VM (hours).
+
+### Which deploy command? (speed)
+
+| Command | When to use | Rough time |
+|--------|-------------|------------|
+| `./deploy.sh env` | You changed only secrets in `.env` (Twilio, `JWT`, Mongo, etc.); **no** new image from GitHub. | **~30 s** |
+| `./deploy.sh quick` | Restart the stack; **no** `git pull`, **no** image pull. Same `api`/`web` tags as last deploy. | **~1 min** |
+| `./deploy.sh` (default) | `git pull` the **main** repo only, pull **`api` + `web` from GHCR**, `up -d`. Submodules are **skipped** (not needed to run pre-built images). | **2–5+ min** (network) |
+| `./deploy.sh --no-pull` | `git pull` and restart without re-downloading `api`/`web` (if digests are already local). | ~1 min |
+| `./deploy.sh --init-submodules` | Add this flag if you also need to refresh `backend`/`frontend` submodules (rare for GHCR; needed before first `build-web` if you never ran `submodule update`). | extra git time |
+| `./deploy.sh build-web` | You must re-bake the SPA with new `VITE_*` and cannot use GitHub Actions. | **15–45+ min** (avoid on tiny VMs) |
+| `./deploy.sh build` | Last resort: compile on the server. | **very slow** |
+
+- **Pre-built images in CI** (Publish Droplet images workflow) is the right place to build; the Droplet should only **pull and run** them.
+- **`pull_policy: if_not_present`** in `docker-compose.ghcr.yml` avoids re-pulling **every** time you `up`; a normal `./deploy.sh` still runs an explicit `docker compose pull api web` so you get a fresh `:latest` from GHCR on release.
 
 ## 6. DNS and HTTPS
 

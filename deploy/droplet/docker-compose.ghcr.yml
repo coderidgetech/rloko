@@ -39,7 +39,9 @@ services:
 
   api:
     image: ${API_IMAGE}
-    pull_policy: always
+    # if_not_present: "up" does not hit the registry every time. deploy.sh still runs
+    # "docker compose pull api web" for normal releases so you get a fresh :latest digest.
+    pull_policy: if_not_present
     restart: unless-stopped
     env_file:
       - .env
@@ -58,7 +60,7 @@ services:
 
   web:
     image: ${WEB_IMAGE}
-    pull_policy: always
+    pull_policy: if_not_present
     restart: unless-stopped
     env_file:
       - .env
