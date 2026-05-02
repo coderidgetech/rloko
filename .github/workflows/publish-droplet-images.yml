@@ -25,6 +25,7 @@ env:
   # Optional web build args (same names as in frontend/Dockerfile). Set as repo *Secrets* if used:
   #   VITE_GOOGLE_CLIENT_ID  (Google Sign-In)
   #   VITE_STRIPE_PUBLISHABLE_KEY, VITE_GOOGLE_MAPS_API_KEY
+  # Shippo + server GOOGLE_MAPS_API_KEY are API-only — set on Droplet / DO App Platform api (see RUNBOOK.md).
 
 jobs:
   push:

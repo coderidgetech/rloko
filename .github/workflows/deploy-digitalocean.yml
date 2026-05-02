@@ -2,6 +2,10 @@
 # Repo secrets (Settings → Secrets and variables → Actions):
 #   DIGITALOCEAN_ACCESS_TOKEN — API token (write for Apps)
 #   DIGITALOCEAN_APP_ID        — e.g. 798ab0a9-47b0-443e-95ca-84a170a0f75f
+#
+# App env (set in DigitalOcean UI as encrypted; not all belong in git): api — GOOGLE_MAPS_API_KEY,
+#   SHIPPO_API_KEY + SHIPPO_FROM_*; web (BUILD_TIME) — VITE_GOOGLE_MAPS_API_KEY, VITE_GOOGLE_CLIENT_ID,
+#   VITE_STRIPE_PUBLISHABLE_KEY. See RUNBOOK.md.
 name: Deploy to DigitalOcean App Platform
 
 on:

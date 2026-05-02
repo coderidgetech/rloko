@@ -4,6 +4,17 @@
 
 1. Set environment variables (see `backend/.env.example` and `frontend/.env.example` templates locally; never commit real secrets).
 2. **Production required:** `ENV=production`, `JWT_SECRET` (non-default), `MONGODB_URI`, `CORS_ALLOWED_ORIGINS` (comma-separated), Twilio Verify, Stripe keys + webhook secret, `APP_BASE_URL`.
+
+## DigitalOcean App Platform (`app.yaml`)
+
+`doctl apps update <APP_ID> --spec app.yaml` (or GitHub Action **Deploy to DigitalOcean App Platform**) applies this file. **Variables you add only in the DO dashboard** can be removed on the next spec update if they are not also present in the spec—prefer documenting them here as comments and **mirroring** critical keys in the dashboard after each spec change, or merge `doctl apps spec get <id>` output into `app.yaml` before editing.
+
+| Component | Scope | Variables to set encrypted in UI |
+|-----------|--------|-----------------------------------|
+| **api** | RUN_TIME | `GOOGLE_MAPS_API_KEY` (Places/geocoding). `SHIPPO_API_KEY` plus `SHIPPO_FROM_*` / `SHIPPO_PARCEL_*` from `backend/.env.example` for live `/api/shipping/calculate`. Also `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `TWILIO_*`, etc. |
+| **web** | BUILD_TIME | `VITE_GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_CLIENT_ID`, `VITE_STRIPE_PUBLISHABLE_KEY` (same values as local `frontend/.env`). **Redeploy the web component** after changing BUILD_TIME vars so Vite rebuilds. |
+
+**GitHub “Publish Droplet images”** already supports `VITE_GOOGLE_MAPS_API_KEY` / `VITE_GOOGLE_CLIENT_ID` / `VITE_STRIPE_PUBLISHABLE_KEY` as repo **Actions secrets** for the **web** image; Shippo and `GOOGLE_MAPS_API_KEY` for the **API** belong on the server or App Platform **api** env, not in the frontend build.
 3. Run database migrations / index creation as documented for your environment.
 4. Smoke test: `GET /health`, `GET /ready`, storefront login, signup OTP, checkout (Stripe test mode), admin login.
 

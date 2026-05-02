@@ -9,6 +9,10 @@
 # app — see doctl apps spec get). If update still errors, paste the `databases:` block
 # from that output into this file. Add JWT, Twilio, etc. in the console.
 # The root Dockerfile in this monorepo is not a service here — api + web use rloco-backend / rloco-frontend.
+#
+# Cloud credentials (DigitalOcean UI → App → component → Environment → Encrypt):
+#   api (RUN_TIME): GOOGLE_MAPS_API_KEY; SHIPPO_API_KEY + SHIPPO_FROM_* / SHIPPO_PARCEL_* (see backend/.env.example).
+#   web (BUILD_TIME): VITE_GOOGLE_MAPS_API_KEY; VITE_GOOGLE_CLIENT_ID; VITE_STRIPE_PUBLISHABLE_KEY — then redeploy web so Vite rebakes.
 
 name: rloko-app
 region: blr
@@ -99,7 +103,7 @@ services:
         value: https://rloko.com,https://www.rloko.com
         scope: RUN_TIME
         type: GENERAL
-      # JWT_SECRET is set at app level (envs above). Add in console: TWILIO_*, STRIPE_*, etc.
+      # JWT_SECRET is app-level. In DO console (encrypt): TWILIO_*, STRIPE_*, GOOGLE_MAPS_API_KEY, SHIPPO_* — see RUNBOOK.md.
 
   - name: web
     github:
@@ -115,3 +119,4 @@ services:
         value: https://rloko.com/api
         scope: BUILD_TIME
         type: GENERAL
+      # Add encrypted BUILD_TIME vars in DO console: VITE_GOOGLE_MAPS_API_KEY, VITE_GOOGLE_CLIENT_ID, VITE_STRIPE_PUBLISHABLE_KEY.
