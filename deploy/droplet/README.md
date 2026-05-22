@@ -40,6 +40,21 @@ nano .env   # set MONGO_ROOT_PASSWORD, JWT_SECRET (openssl rand -hex 64), VITE_*
 - **`MONGODB_URI`**: for the bundled Mongo, keep it aligned with `MONGO_ROOT_PASSWORD` in `.env.example` pattern.  
 - **Managed MongoDB (Atlas / DO):** remove the `mongo` service from `docker-compose.yml`, remove `depends_on: mongo` from `api`, set `MONGODB_URI` to the provider’s URI.
 
+### Production checklist (API hardening)
+
+The Go API **refuses to start** in production if `CORS_ALLOWED_ORIGINS` is empty (`ENV=production`). Set all of the following for a real deployment:
+
+| Variable | Notes |
+|----------|--------|
+| `ENV` | `production` (enables release mode, global rate limit, stricter error responses). |
+| `JWT_SECRET` | Strong random secret; never use dev defaults. |
+| `MONGODB_URI` | Production database connection string. |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed web origins (e.g. `https://www.example.com,https://example.com`). |
+| `APP_BASE_URL` | Public site URL (password-reset links, emails). |
+| `SMTP_*` + `ADMIN_EMAIL` | Required for password reset, contact form to admin, vendor credential email. |
+
+Optional: `ORDER_*` checkout defaults, `ORDER_INDIA_DEFAULT_GST_PERCENT` (Mongo fallback GST for India), `STRIPE_TAX_PRODUCT_CODE` (optional `txcd_` for US Stripe Tax), plus enable **Stripe Tax** in the Stripe Dashboard for US (see `backend/.env.example`).
+
 ## 5. Start (build on the Droplet — can be 30–90+ min on 1 vCPU)
 
 ```bash

@@ -1,56 +1,65 @@
 #!/usr/bin/env bash
 # R-Loko Droplet — one-command deploy from this directory.
-# Usage: ./deploy.sh              # default: git pull (no submodules) → pull api+web → up
-#        ./deploy.sh quick        # no git, no pull — same images, fast restart (~1 min)
-#        ./deploy.sh env          # .env to api only: no git, no pull, recreate api (~30 s)
-#        ./deploy.sh build-web    # Vite on-server (slow) — submodules for frontend/ required
-#        ./deploy.sh build        # Go+Vite on-server (very slow) — use CI images instead
+#
+# Usage: ./deploy.sh [ghcr|quick|env|build-web|build] --env dev|prod [options]
+#
+# Environments:
+#   --env dev    use .env.dev  → deploys to dev.rloko.com   (default)
+#   --env prod   use .env.prod → deploys to rloko.com
+#
+# Modes:
+#   ghcr (default)  git pull → pull api+web images from GHCR → up
+#   quick           no git, no pull — restart with existing images (~1 min)
+#   env             apply .env changes to api only, no image pull (~30 s)
+#   build-web       build Vite on the Droplet (bakes VITE_* from env file); 15-45+ min — use tmux
+#   build           compile Go + Vite on Droplet (very slow; use CI images instead)
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 RLOKO_ROOT="$(cd "$DIR/../.." && pwd)"
 export DOCKER_BUILDKIT=1
-# Slow pulls / large image layers on small links (default 300s can be tight)
 export DOCKER_CLIENT_TIMEOUT="${DOCKER_CLIENT_TIMEOUT:-600}"
 
 MODE="ghcr"
 MODE_LABEL="ghcr"
+DEPLOY_ENV="dev"
 SKIP_GIT=0
 SKIP_LOGIN=0
 NO_PULL=0
 LOGFILE=""
-PUBLIC_HOST="${PUBLIC_HOST:-dev.rloko.com}"
 QUICK=0
 INIT_SUBMODULES=0
 
 usage() {
   cat <<'EOF'
-Usage: deploy.sh [ghcr|quick|env|build-web|build] [options]
+Usage: deploy.sh [ghcr|quick|env|build-web|build] --env dev|prod [options]
 
-  ghcr (default)  git pull in repo (submodules SKIPPED by default) → pull api+web from GHCR → up
-  quick          same as ghcr but --skip-git and --no-pull (restart stack, existing images, ~1 min)
-  env            no git, no image pull — recreates only the **api** container to apply .env (~30 s)
-  build-web      submodules for frontend/ → pull api (GHCR) + build Vite on Droplet (15–45+ min; use tmux)
-  build          submodules + compile Go + Vite on Droplet (30–90+ min; not recommended on 1 vCPU/1GB)
+Environments:
+  --env dev   (default) uses .env.dev  → dev.rloko.com
+  --env prod            uses .env.prod → rloko.com
 
-**Typical use**
-  • New app version from GitHub:     ./deploy.sh
-  • Only secrets / Twilio in .env:  ./deploy.sh env
-  • VITE_* (Google, etc.):         CI "Publish Droplet images" or ./deploy.sh build-web
-  • Never use ./deploy.sh build   on the Droplet unless you have to — use pre-built GHCR images
+Modes:
+  ghcr (default)  git pull → GHCR pull api+web → up
+  quick           no git, no pull — restart with existing images
+  env             apply .env changes to api only (no pull, ~30 s)
+  build-web       pull api (GHCR) + build Vite on Droplet from env file
+  build           compile Go + Vite on Droplet (not recommended; use CI images)
+
+Typical use:
+  ./deploy.sh --env dev          New release to dev
+  ./deploy.sh --env prod         New release to prod
+  ./deploy.sh env --env dev      Apply .env.dev changes to api only
+  ./deploy.sh build-web --env prod  Build prod web image on-server
 
 Options:
-  --init-submodules   After git pull, run submodule update (only needed for build, build-web, or debugging)
-  --skip-git          Skip git pull (and submodules)
-  --skip-login        (ghcr / quick) Skip docker login (if already: docker login ghcr.io)
-  --no-pull           (ghcr / quick / build-web) Skip docker pull of images
+  --init-submodules   Run submodule update after git pull (for build/build-web)
+  --skip-git          Skip git pull
+  --skip-login        Skip docker login (use if already logged in)
+  --no-pull           Skip docker pull of images
   --log FILE          Append all output to FILE
   -h, --help          This help
 
-Environment: GHCR_PAT, GHCR_USER, PUBLIC_HOST (default dev.rloko.com) — see README.
-
-Prerequisites: .env in this directory with API_IMAGE, WEB_IMAGE (and see .env.example).
-  • env / quick: same as ghcr; env only recreates the api container to pick up new env_file.
+Prerequisites: .env.dev and .env.prod in this directory (cp .env.dev.example .env.dev).
 EOF
 }
 
@@ -59,24 +68,39 @@ while [ $# -gt 0 ]; do
     ghcr|build|build-web) MODE="$1"; MODE_LABEL="$1"; shift ;;
     quick) MODE=ghcr; QUICK=1; SKIP_GIT=1; NO_PULL=1; MODE_LABEL=quick; shift ;;
     env)   MODE=env; MODE_LABEL=env; shift ;;
+    --env)
+      if [ $# -lt 2 ] || [ -z "${2:-}" ]; then echo "--env needs dev or prod" >&2; exit 1; fi
+      DEPLOY_ENV="$2"; shift 2
+      ;;
     --init-submodules) INIT_SUBMODULES=1; shift ;;
     --skip-git)   SKIP_GIT=1;   shift ;;
     --skip-login) SKIP_LOGIN=1; shift ;;
     --no-pull)    NO_PULL=1;    shift ;;
     --log)
       if [ $# -lt 2 ] || [ -z "${2:-}" ]; then echo "--log needs a file path" >&2; exit 1; fi
-      LOGFILE="$2"
-      shift 2
+      LOGFILE="$2"; shift 2
       ;;
     -h|--help)  usage; exit 0 ;;
     *)
       if [ "${1#-}" != "$1" ]; then echo "Unknown option: $1" >&2; usage; exit 1; fi
-      echo "Unknown argument: $1" >&2
-      usage
-      exit 1
+      echo "Unknown argument: $1" >&2; usage; exit 1
       ;;
   esac
 done
+
+# Resolve env file
+ENV_FILE="$DIR/.env.${DEPLOY_ENV}"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "Missing $ENV_FILE — run: cp .env.${DEPLOY_ENV}.example .env.${DEPLOY_ENV}" >&2
+  exit 1
+fi
+
+# Derive PUBLIC_HOST from env file for health check URL
+PUBLIC_HOST=$(grep -E '^[[:space:]]*PUBLIC_DOMAIN=' "$ENV_FILE" 2>/dev/null \
+  | sed 's/.*PUBLIC_DOMAIN=//' | tr -d '"'"'" | head -1)
+PUBLIC_HOST="${PUBLIC_HOST:-${DEPLOY_ENV}.rloko.com}"
+
+echo "==> Environment: ${DEPLOY_ENV} (${ENV_FILE}), host: ${PUBLIC_HOST}"
 
 if [ -n "$LOGFILE" ]; then
   # shellcheck disable=SC2094
@@ -84,28 +108,19 @@ if [ -n "$LOGFILE" ]; then
   echo "==> Logging to $LOGFILE (start: $(date -Iseconds 2>/dev/null || date))"
 fi
 
-if [ ! -f "$DIR/.env" ]; then
-  echo "No $DIR/.env — run: cp .env.example .env && edit .env" >&2
-  exit 1
-fi
-
 cd "$DIR"
 
-COMPOSE_GHCR=(docker compose -f "$DIR/docker-compose.ghcr.yml")
-COMPOSE_WEB_BAKE=(docker compose --env-file "$DIR/.env" -f "$DIR/docker-compose.ghcr.yml" -f "$DIR/docker-compose.ghcr-web-build.yml")
-COMPOSE_BUILD=(docker compose --env-file "$DIR/.env" -f "$DIR/docker-compose.yml")
+COMPOSE_GHCR=(docker compose --env-file "$ENV_FILE" -f "$DIR/docker-compose.ghcr.yml")
+COMPOSE_WEB_BAKE=(docker compose --env-file "$ENV_FILE" -f "$DIR/docker-compose.ghcr.yml" -f "$DIR/docker-compose.ghcr-web-build.yml")
+COMPOSE_BUILD=(docker compose --env-file "$ENV_FILE" -f "$DIR/docker-compose.yml")
 
-# --- env: apply .env to api, nothing else (fast) ---
+# --- env: apply env file to api, nothing else (fast) ---
 if [ "$MODE" = "env" ]; then
-  if ! grep -qE '^[[:space:]]*API_IMAGE=.[[:alnum:]:._/-]+' .env; then
-    echo "In .env, set API_IMAGE=, e.g. ghcr.io/org/rloco-api:latest" >&2
+  if ! grep -qE '^[[:space:]]*API_IMAGE=.[[:alnum:]:._/-]+' "$ENV_FILE"; then
+    echo "In $ENV_FILE, set API_IMAGE=, e.g. ghcr.io/org/rloco-api:latest" >&2
     exit 1
   fi
-  if ! grep -qE '^[[:space:]]*WEB_IMAGE=.[[:alnum:]:._/-]+' .env; then
-    echo "In .env, set WEB_IMAGE= (e.g. ghcr.io/org/rloco-web:latest)" >&2
-    exit 1
-  fi
-  echo "==> env: recreate **api** from $DIR/.env (no git, no docker pull) — $(date -Iseconds 2>/dev/null || true)"
+  echo "==> env: recreate **api** from $ENV_FILE (no git, no docker pull) — $(date -Iseconds 2>/dev/null || true)"
   "${COMPOSE_GHCR[@]}" up -d --force-recreate --no-deps api
   echo "    Tip: edited Caddyfile?  ${COMPOSE_GHCR[*]} up -d --force-recreate caddy"
   PS_CMD=("${COMPOSE_GHCR[@]}")
@@ -115,14 +130,14 @@ if [ "$MODE" = "env" ]; then
   if code=$(curl -sfS --connect-timeout 3 --max-time 12 -o /dev/null -w '%{http_code}' -H "Host: $PUBLIC_HOST" "http://127.0.0.1/health" 2>/dev/null); then
     echo "    /health => HTTP $code"
   else
-    echo "    /health check failed (wrong PUBLIC_HOST? try: PUBLIC_HOST=your.caddy.host ./deploy.sh env)" >&2
+    echo "    /health check failed" >&2
   fi
-  echo "==> Done (env)."
+  echo "==> Done (env / ${DEPLOY_ENV})."
   exit 0
 fi
 
-# Pre-built web images ignore VITE_* in .env; bake with build-web, full build, or GitHub Actions.
-if [ "$MODE" = "ghcr" ] && [ "$QUICK" -eq 0 ] && grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env 2>/dev/null; then
+# Pre-built web images ignore VITE_* in env file; bake with build-web, full build, or GitHub Actions.
+if [ "$MODE" = "ghcr" ] && [ "$QUICK" -eq 0 ] && grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' "$ENV_FILE" 2>/dev/null; then
   echo "NOTE: VITE_GOOGLE_CLIENT_ID in .env is not used in ghcr mode. Use:  ./deploy.sh build-web" >&2
   echo "      (or GitHub secret VITE_GOOGLE_CLIENT_ID + Publish Droplet images)." >&2
 fi
@@ -209,9 +224,9 @@ EOT
   PS_CMD=("${COMPOSE_GHCR[@]}")
 
 elif [ "$MODE" = "build-web" ]; then
-  echo "==> build-web: pull api (GHCR) + build only the web (Vite) from $DIR/.env (small VM–friendly)"
-  if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env; then
-    echo "WARNING: VITE_GOOGLE_CLIENT_ID empty in .env — Google Sign-In may show 'not configured'." >&2
+  echo "==> build-web: pull api (GHCR) + build only the web (Vite) from $ENV_FILE (small VM–friendly)"
+  if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' "$ENV_FILE"; then
+    echo "WARNING: VITE_GOOGLE_CLIENT_ID empty in $ENV_FILE — Google Sign-In may show 'not configured'." >&2
   fi
   PAT="${GHCR_PAT:-${GHCR_TOKEN:-}}"
   if [ -n "$PAT" ] && [ "$SKIP_LOGIN" -eq 0 ]; then
@@ -240,8 +255,8 @@ EOT
 
 else
   echo "==> full build: Go api + Vite web on this host (use tmux; or CI + ./deploy.sh)" >&2
-  if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' .env; then
-    echo "WARNING: VITE_GOOGLE_CLIENT_ID is missing or empty in .env" >&2
+  if ! grep -qE '^[[:space:]]*VITE_GOOGLE_CLIENT_ID=[^#[:space:]]' "$ENV_FILE"; then
+    echo "WARNING: VITE_GOOGLE_CLIENT_ID is missing or empty in $ENV_FILE" >&2
   fi
   "${COMPOSE_BUILD[@]}" up -d --build
   PS_CMD=("${COMPOSE_BUILD[@]}")
@@ -254,12 +269,12 @@ echo "==> Health (Host: $PUBLIC_HOST → http://127.0.0.1/health)"
 if code=$(curl -sfS --connect-timeout 3 --max-time 12 -o /dev/null -w '%{http_code}' -H "Host: $PUBLIC_HOST" "http://127.0.0.1/health" 2>/dev/null); then
   echo "    /health => HTTP $code"
 else
-  echo "    /health check failed (wrong PUBLIC_HOST? try: PUBLIC_HOST=your.caddy.host ./deploy.sh)" >&2
+  echo "    /health check failed" >&2
 fi
 
-echo "==> curl (from this host or your laptop; health is /health, not /api/health)"
+echo "==> curl (from this host or your laptop)"
 echo "    curl -sS -H \"Host: $PUBLIC_HOST\" http://127.0.0.1/health"
 echo "    curl -sS https://$PUBLIC_HOST/health"
-echo "    curl -sS https://$PUBLIC_HOST/api/config   # needs Mongo + seed"
+echo "    curl -sS https://$PUBLIC_HOST/api/config"
 
-echo "==> Done ($MODE_LABEL)."
+echo "==> Done ($MODE_LABEL / ${DEPLOY_ENV})."

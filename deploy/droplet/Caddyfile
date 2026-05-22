@@ -1,7 +1,8 @@
-# Staging: dev.rloko.com. For local testing without DNS, temporarily use: :80 { ... }
-# Let’s Encrypt: name must resolve (GoDaddy: A record host "dev" -> Droplet IP), ports 80/443 open.
+# Domain is set via PUBLIC_DOMAIN in .env.dev / .env.prod (passed to caddy container).
+# Let’s Encrypt: DNS must resolve to this server’s IP; ports 80 and 443 must be open.
+# Local testing without DNS: set PUBLIC_DOMAIN=:80 in your .env file.
 
-dev.rloko.com {
+{$PUBLIC_DOMAIN:dev.rloko.com} {
 	@backend path /api* /health /ready
 	handle @backend {
 		reverse_proxy http://api:8080

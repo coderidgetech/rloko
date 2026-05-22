@@ -1,0 +1,53 @@
+# Local development stack — everything in Docker, built from source.
+# Uses Atlas (MongoDB) and R2 (storage) — same as dev/prod, no local DB needed.
+#
+# From repo root:
+#   make local      → build + start (shows logs)
+#   make local-up   → build + start in background
+#   make local-down → stop
+
+name: rloco-local
+
+networks:
+  rloco:
+    driver: bridge
+
+services:
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ENV: development
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    networks:
+      - rloco
+
+  web:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080/api}
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_STORAGE_BUCKET: ${VITE_FIREBASE_STORAGE_BUCKET:-}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+        VITE_FIREBASE_VAPID_KEY: ${VITE_FIREBASE_VAPID_KEY:-}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - rloco
+    depends_on:
+      - api
