@@ -18,6 +18,12 @@ on:
       - "frontend/**"
       - ".github/workflows/publish-droplet-images.yml"
 
+# Avoid two runs racing to push the same :latest tag (a common cause of
+# "unknown blob" on GHCR).
+concurrency:
+  group: publish-droplet-images-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   # Baked into the web image; must match droplet Caddy host + /api. Switch to prod when ready.
@@ -46,6 +52,9 @@ jobs:
           echo "api=${{ env.REGISTRY }}/${OWNER_LC}/rloco-api" >> $GITHUB_OUTPUT
           echo "web=${{ env.REGISTRY }}/${OWNER_LC}/rloco-web" >> $GITHUB_OUTPUT
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -59,6 +68,10 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          # Skip provenance/SBOM attestation manifests — GHCR can reject them with
+          # "unknown blob" on push, and the droplet doesn't consume them.
+          provenance: false
+          sbom: false
           tags: |
             ${{ steps.name.outputs.api }}:latest
             ${{ steps.name.outputs.api }}:${{ github.sha }}
@@ -74,6 +87,8 @@ jobs:
             VITE_STRIPE_PUBLISHABLE_KEY=${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
             VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ steps.name.outputs.web }}:latest
             ${{ steps.name.outputs.web }}:${{ github.sha }}
