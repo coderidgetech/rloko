@@ -1,3 +1,6 @@
 .DS_Store
 Thumbs.db
 *.log
+
+# Local test secrets (Stripe/Shippo) — never commit
+.env.local.secrets
